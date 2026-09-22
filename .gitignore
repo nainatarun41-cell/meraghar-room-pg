@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local tooling + running logs (never push these)
+/.opencode/
+dev-server.log
+dev-server-err.log
