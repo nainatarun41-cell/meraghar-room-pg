@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { Home, Mail, MapPin, ShieldAlert } from "lucide-react";
 import { Container } from "@/components/ui";
+import { fetchActiveLocations } from "@/lib/locations";
 
-export function Footer() {
+export async function Footer() {
+  const locations = await fetchActiveLocations();
+
   return (
     <footer className="mt-auto border-t border-slate-200 bg-slate-50">
       <Container className="py-10">
@@ -34,20 +37,24 @@ export function Footer() {
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-slate-900">Account</h4>
+            <h4 className="text-sm font-semibold text-slate-900">Services</h4>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              <li><Link className="hover:text-teal-600" href="/add-property">Post Property</Link></li>
               <li><Link className="hover:text-teal-600" href="/post-requirement">Post Requirement</Link></li>
-              <li><Link className="hover:text-teal-600" href="/dashboard">Dashboard</Link></li>
-              <li><Link className="hover:text-teal-600" href="/favorites">Favorites</Link></li>
+              <li><Link className="hover:text-teal-600" href="/requirements">Property Requests</Link></li>
+              <li><Link className="hover:text-teal-600" href="/help">Help & Support</Link></li>
             </ul>
           </div>
 
           <div>
             <h4 className="text-sm font-semibold text-slate-900">Cities</h4>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              <li><Link className="hover:text-teal-600" href="/properties?city=Kaithal">Kaithal</Link></li>
-              <li><Link className="hover:text-teal-600" href="/properties?city=Pundri">Pundri</Link></li>
+              {locations.slice(0, 7).map((loc) => (
+                <li key={loc.id}>
+                  <Link className="hover:text-teal-600" href={`/${loc.slug}`}>
+                    {loc.name}
+                  </Link>
+                </li>
+              ))}
             </ul>
             <div className="mt-4 flex flex-col gap-1 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Kaithal, Haryana, India</span>

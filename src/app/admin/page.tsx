@@ -6,7 +6,7 @@ import { fetchAdminStats } from "@/lib/admin-queries";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard | MeraGhar",
+  title: "Dashboard",
 };
 
 export default async function AdminDashboardPage() {

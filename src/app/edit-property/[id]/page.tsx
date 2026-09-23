@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Container } from "@/components/ui";
 import { PropertyForm } from "@/components/PropertyForm";
 import { fetchCities, fetchLocalities, fetchPropertyForOwner } from "@/lib/queries";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import type { AppPageProps } from "@/types";
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export default async function EditPropertyPage(
   props: AppPageProps<{ id: string }>
 ) {
   const { id } = await props.params;
-  const user = await requireUser();
+  const user = await requireAdmin();
   const [cities, localities, property] = await Promise.all([
     fetchCities(),
     fetchLocalities(),

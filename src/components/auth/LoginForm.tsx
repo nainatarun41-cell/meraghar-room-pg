@@ -30,7 +30,7 @@ export function LoginForm() {
       if (result.ok) {
         toast("Welcome back!", "success");
         const next = searchParams.get("next");
-        router.replace(next && next.startsWith("/") && !next.startsWith("/login") ? next : "/dashboard");
+        router.replace(next && next.startsWith("/") && !next.startsWith("/login") ? next : "/");
         router.refresh();
       } else {
         setError(result.error ?? "Login failed.");

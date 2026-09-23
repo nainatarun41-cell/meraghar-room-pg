@@ -26,7 +26,7 @@ export function UpdatePasswordForm() {
       const result = await updatePassword(password);
       if (result.ok) {
         toast("Password updated successfully!", "success");
-        router.replace("/dashboard");
+        router.replace("/");
         router.refresh();
       } else {
         setError(result.error ?? "Could not update password.");

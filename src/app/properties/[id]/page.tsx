@@ -4,6 +4,9 @@ import { Container } from "@/components/ui";
 import { PropertyCard } from "@/components/PropertyCard";
 import { PropertyDetails } from "@/components/PropertyDetails";
 import { TrackViews } from "@/components/TrackViews";
+import { JsonLd } from "@/components/JsonLd";
+import { realEstateListingJsonLd } from "@/lib/locations/structured-data";
+import { getPublicEnv } from "@/lib/env";
 import { fetchFavoriteIds, fetchPublicOwner, fetchPublicProperties, fetchPublicProperty } from "@/lib/queries";
 import { getAuthUser } from "@/lib/auth";
 import { formatPriceForCard, propertyTypeLabel } from "@/lib/utils";
@@ -57,6 +60,7 @@ export default async function PropertyDetailsPage(
   return (
     <>
       <TrackViews id={property.id} />
+      <JsonLd data={realEstateListingJsonLd(property, getPublicEnv().siteUrl.replace(/\/$/, ""))} />
       <Container className="py-6 sm:py-8">
         <PropertyDetails
           property={property}

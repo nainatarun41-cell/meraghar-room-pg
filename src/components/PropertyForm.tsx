@@ -178,7 +178,7 @@ export function PropertyForm({
           "success"
         );
         if (result.propertyId) {
-          router.push("/dashboard");
+          router.push("/admin/properties");
           router.refresh();
         } else {
           router.refresh();

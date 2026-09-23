@@ -17,6 +17,9 @@ export default async function FavoritesPage() {
   const user = await getAuthUser();
   if (!user) redirect("/login?next=/favorites");
 
+  // Broker model: favorites is admin-only. Customers are sent back home.
+  if (user.profile?.role !== "admin") redirect("/");
+
   const properties = await fetchFavoriteProperties(user.id);
 
   return (

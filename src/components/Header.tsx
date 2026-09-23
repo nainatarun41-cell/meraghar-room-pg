@@ -6,12 +6,11 @@ import { useState } from "react";
 import {
   Heart,
   Home,
-  LayoutDashboard,
   LogIn,
   LogOut,
   Menu,
-  PlusCircle,
   Search,
+  Send,
   UserRound,
   X,
 } from "lucide-react";
@@ -24,7 +23,6 @@ const NAV_LINKS = [
   { href: "/properties?purpose=rent", label: "Rent" },
   { href: "/properties?purpose=sale", label: "Buy" },
   { href: "/requirements", label: "Requirements" },
-  { href: "/favorites", label: "Favorites" },
   { href: "/help", label: "Help" },
 ];
 
@@ -82,36 +80,18 @@ export function Header({ profile }: { profile: ProfileRow | null }) {
 
         <div className="hidden items-center gap-2 md:flex">
           <Link
-            href="/add-property"
+            href="/post-requirement"
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-amber-500 px-4 text-sm font-semibold text-white transition-colors hover:bg-amber-600"
           >
-            <PlusCircle className="h-4 w-4" />
-            Post Property
+            <Send className="h-4 w-4" />
+            Post Requirement
           </Link>
           {profile ? (
             <>
-              <Link
-                href="/dashboard"
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                Dashboard
-              </Link>
-              {profile.role === "admin" && (
-                <Link
-                  href="/admin"
-                  className="inline-flex h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  Admin
-                </Link>
-              )}
-              <Link
-                href="/dashboard"
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-600 px-3 text-sm font-semibold text-white transition-colors hover:bg-teal-700"
-              >
+              <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm font-medium text-slate-600">
                 <UserRound className="h-4 w-4" />
-                <span className="max-w-32 truncate">{profile.name || "Your Account"}</span>
-              </Link>
+                <span className="max-w-32 truncate">{profile.name || "User"}</span>
+              </span>
               <button
                 onClick={handleSignOut}
                 disabled={signingOut}
@@ -158,31 +138,13 @@ export function Header({ profile }: { profile: ProfileRow | null }) {
                 {link.label}
               </Link>
             ))}
-            {profile && (
-              <Link
-                href="/dashboard"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              >
-                Your Account
-              </Link>
-            )}
-            {profile?.role === "admin" && (
-              <Link
-                href="/admin"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              >
-                Admin Panel
-              </Link>
-            )}
             <Link
-              href="/add-property"
+              href="/post-requirement"
               onClick={() => setMobileOpen(false)}
               className="mt-2 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 text-sm font-semibold text-white"
             >
-              <PlusCircle className="h-4 w-4" />
-              Post Property
+              <Send className="h-4 w-4" />
+              Post Requirement
             </Link>
             {profile ? (
               <button
@@ -218,9 +180,13 @@ export function MobileBottomNav({ profile }: { profile: ProfileRow | null }) {
   const items = [
     { href: "/", label: "Home", icon: Home },
     { href: "/properties", label: "Search", icon: Search },
-    { href: "/add-property", label: "Post", icon: PlusCircle },
-    { href: "/favorites", label: "Saved", icon: Heart },
-    { href: profile ? "/dashboard" : "/login", label: "Account", icon: profile ? LayoutDashboard : LogIn },
+    { href: "/post-requirement", label: "Requirement", icon: Send },
+    { href: "/requirements", label: "Requests", icon: Heart },
+    {
+      href: profile ? "/dashboard" : "/login",
+      label: profile ? "Account" : "Login",
+      icon: profile ? UserRound : LogIn,
+    },
   ];
 
   return (

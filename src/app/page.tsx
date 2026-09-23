@@ -17,6 +17,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { PropertyCard } from "@/components/PropertyCard";
 import { RequirementsBoard } from "@/components/requirements/RequirementsBoard";
 import { fetchCities, fetchLocalities, fetchPublicProperties, fetchRequirements } from "@/lib/queries";
+import { fetchActiveLocations } from "@/lib/locations";
 import { getAuthUser } from "@/lib/auth";
 import { APP_SUBTITLE, APP_TAGLINE, DEFAULT_CITIES } from "@/lib/constants";
 
@@ -28,6 +29,8 @@ export default async function HomePage() {
 
   const user = await getAuthUser();
   const isLoggedIn = Boolean(user);
+
+  const locations = await fetchActiveLocations();
 
   const [featured, latest, rentProperties, saleProperties, shopProperties, requirements] = await Promise.all([
     fetchPublicProperties({ featuredOnly: true, pageSize: 6 }),
@@ -111,6 +114,33 @@ export default async function HomePage() {
           </div>
         </Container>
       </section>
+
+      {/* ---------- Popular cities (SEO location pages) ---------- */}
+      {locations.length > 0 && (
+        <section className="py-4">
+          <Container>
+            <SectionHeading
+              title="Properties in nearby cities"
+              subtitle="Dedicated pages for every city — rooms, PGs, flats, houses and shops."
+            />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {locations.slice(0, 8).map((loc) => (
+                <Link
+                  key={loc.id}
+                  href={`/${loc.slug}`}
+                  className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-800 group-hover:text-teal-700">{loc.name}</p>
+                    <p className="text-xs text-slate-400">Rooms · PG · Flats · Shops</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-600" />
+                </Link>
+              ))}
+            </div>
+          </Container>
+        </section>
+      )}
 
       {/* ---------- Featured ---------- */}
       {featured.properties.length > 0 && (
@@ -274,9 +304,9 @@ export default async function HomePage() {
                 </Link>
               </div>
               <p className="mt-5 text-center text-sm text-teal-200">
-                Apni shop/dukaan list karni hai?{" "}
-                <Link href="/add-property" className="font-semibold text-amber-300 underline underline-offset-2 hover:text-amber-200">
-                  Yahan free mein list karein
+                Apni shop/dukaan bechna ya rent par dena hai?{" "}
+                <Link href="/post-requirement" className="font-semibold text-amber-300 underline underline-offset-2 hover:text-amber-200">
+                  Yahan contact karein
                 </Link>
               </p>
             </div>
@@ -284,25 +314,26 @@ export default async function HomePage() {
         </Container>
       </section>
 
-      {/* ---------- Post property CTA ---------- */}
+      {/* ---------- List your property CTA ---------- */}
       <section className="py-12">
         <Container>
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-teal-700 to-teal-900 px-6 py-12 text-center sm:px-12">
             <div className="relative">
               <h2 className="text-2xl font-extrabold text-white sm:text-3xl">
-                List Your Property Free
+                Property list karni hai?
               </h2>
               <p className="mx-auto mt-2 max-w-xl text-teal-100">
-                Have a room, flat or house for rent? Selling your property? List it free
-                and reach the right tenants and buyers in Kaithal &amp; Pundri.
+                Apna room, flat ya house rent par dena hai ya bechna hai? MeraGhar team se
+                contact karein — hum aapki property ke liye sahi tenants/buyers dhundein
+                aur poori listing manage karein.
               </p>
               <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <Link
-                  href="/add-property"
+                  href="/post-requirement"
                   className="inline-flex h-12 items-center gap-2 rounded-xl bg-amber-500 px-8 text-base font-bold text-white transition-colors hover:bg-amber-600"
                 >
                   <Megaphone className="h-5 w-5" />
-                  Post Property Free
+                  MeraGhar se contact karein
                 </Link>
                 <Link
                   href="/post-requirement"

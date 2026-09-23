@@ -151,6 +151,18 @@ export async function fetchAllLocalities() {
   return data ?? [];
 }
 
+export async function fetchAllLocations() {
+  const admin = createSupabaseAdminClient();
+  if (!admin) return [];
+  const { data, error } = await admin
+    .from("locations")
+    .select("*")
+    .order("type")
+    .order("name");
+  if (error) return [];
+  return data ?? [];
+}
+
 export async function fetchOpenRequirementCount(): Promise<number> {
   const admin = createSupabaseAdminClient();
   if (!admin) return 0;

@@ -41,11 +41,11 @@ export const requireUser = async (): Promise<AuthUser> => {
   return user;
 };
 
-/** Admin-only guard. Non-admins are bounced to the dashboard. */
+/** Admin-only guard. Non-admins are bounced to the home page (customers have no dashboard). */
 export const requireAdmin = async (): Promise<AuthUser> => {
   const user = await requireUser();
   if (user.profile?.role !== "admin") {
-    redirect("/dashboard");
+    redirect("/");
   }
   return user;
 };
@@ -54,5 +54,5 @@ export const requireAdmin = async (): Promise<AuthUser> => {
 export function defaultPostLoginPath(profile: ProfileRow | null, fallback: string | null): string {
   if (fallback?.startsWith("/") && !fallback.startsWith("/login")) return fallback;
   if (profile?.role === "admin") return "/admin";
-  return "/dashboard";
+  return "/";
 }

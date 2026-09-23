@@ -1,0 +1,409 @@
+﻿-- ============================================================
+-- MeraGhar - MISSING DATABASE MIGRATIONS (apply all at once)
+-- Run this WHOLE file in:  Supabase Dashboard > SQL Editor > New query > Run
+-- This is idempotent (safe to re-run).
+-- It applies the 3 migrations that were never run on this project.
+-- ============================================================
+
+-- ==================== migration: 20260913000000_contact_requests.sql ====================
+
+-- Contact requests / leads
+-- Customers "interested" in a property or requirement contact MeraGhar admin.
+-- Owner & poster contact details are shown ONLY to the admin (never on the public site).
+create table if not exists public.contact_requests (
+  id uuid primary key default gen_random_uuid(),
+  property_id uuid references public.properties(id) on delete set null,
+  requirement_id uuid references public.requirements(id) on delete set null,
+  name text not null default '',
+  phone text not null default '',
+  message text not null default '',
+  source text not null default 'property',
+  created_at timestamptz not null default now()
+);
+
+alter table public.contact_requests enable row level security;
+
+-- Anyone (logged out or in) can drop an interest lead
+create policy "contact_requests_insert_public"
+  on public.contact_requests for insert
+  to anon, authenticated
+  with check (true);
+
+-- Only admins can read leads
+create policy "contact_requests_select_admin"
+  on public.contact_requests for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid() and profiles.role = 'admin'
+    )
+  );
+
+-- ==================== migration: 20260921000000_monetization_analytics.sql ====================
+
+-- ============================================================
+-- MeraGhar - Analytics + monetization (views, contact reveals, payments)
+-- Depends on: 20260911000000_init.sql (profiles, properties require RLS)
+-- Idempotent: safe to re-run.
+-- ============================================================
+
+-- ------------------------------------------------------------------
+-- 1. properties: counters needed by analytics/listing
+-- ------------------------------------------------------------------
+
+alter table public.properties add column if not exists view_count bigint not null default 0;
+alter table public.properties add column if not exists contact_reveal_count integer not null default 0;
+
+-- Public owner info must never expose raw contact details - owner phone/email
+-- is only returned by server routes after authorized contact reveal.
+drop view if exists public.public_owners;
+create view public.public_owners
+with (security_invoker = true) as
+select id, name, avatar_url
+from public.profiles;
+
+-- Seed the new canonical counter from the legacy `views` tally once.
+update public.properties
+set view_count = views
+where view_count = 0 and views > 0;
+
+-- ------------------------------------------------------------------
+-- 2. New tables
+-- ------------------------------------------------------------------
+
+-- One row per recorded property page view. Raw IPs are never stored -
+-- only a salted SHA-256 hash of (anon visitor id + salt) is kept.
+create table if not exists public.property_views (
+  id           uuid primary key default gen_random_uuid(),
+  property_id  uuid not null references public.properties(id) on delete cascade,
+  viewer_id    uuid references public.profiles(id) on delete set null,
+  visitor_hash text not null,
+  device_type  text not null default 'desktop' check (device_type in ('mobile', 'tablet', 'desktop')),
+  viewed_at    timestamptz not null default now()
+);
+
+create index if not exists idx_property_views_prop_time
+  on public.property_views (property_id, viewed_at desc);
+create index if not exists idx_property_views_time
+  on public.property_views (viewed_at desc);
+
+-- A contact reveal = a customer paid to unlock an owner's contact details.
+create table if not exists public.contact_reveals (
+  id          uuid primary key default gen_random_uuid(),
+  property_id uuid not null references public.properties(id) on delete cascade,
+  customer_id uuid not null references public.profiles(id) on delete cascade,
+  amount_paid numeric(12,2) not null default 0,
+  payment_id  uuid references public.payments(id) on delete set null,
+  revealed_at timestamptz not null default now(),
+  constraint contact_reveals_property_customer_key unique (property_id, customer_id)
+);
+
+create index if not exists idx_contact_reveals_property on public.contact_reveals (property_id);
+create index if not exists idx_contact_reveals_customer on public.contact_reveals (customer_id);
+
+-- All payments: contact reveals + featured listing purchases.
+create table if not exists public.payments (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             uuid not null references public.profiles(id) on delete cascade,
+  property_id         uuid references public.properties(id) on delete set null,
+  type                text not null check (type in ('contact_reveal', 'featured_listing')),
+  amount              numeric(12,2) not null check (amount >= 0),
+  status              text not null default 'pending' check (status in ('pending', 'completed', 'failed')),
+  razorpay_order_id   text,
+  razorpay_payment_id text,
+  created_at          timestamptz not null default now(),
+  completed_at        timestamptz
+);
+
+create index if not exists idx_payments_user   on public.payments (user_id);
+create index if not exists idx_payments_status on public.payments (status, created_at desc);
+create index if not exists idx_payments_order  on public.payments (razorpay_order_id) where razorpay_order_id is not null;
+
+-- ------------------------------------------------------------------
+-- 3. Row Level Security
+-- ------------------------------------------------------------------
+
+alter table public.property_views   enable row level security;
+alter table public.contact_reveals  enable row level security;
+alter table public.payments         enable row level security;
+
+-- ----- property_views -----
+-- Only written through the security-definer RPC below.
+drop policy if exists "property_views_select_owner" on public.property_views;
+create policy "property_views_select_owner"
+  on public.property_views for select
+  to authenticated
+  using (exists (
+    select 1 from public.properties p
+    where p.id = property_id and p.owner_id = auth.uid()
+  ));
+
+drop policy if exists "property_views_select_admin" on public.property_views;
+create policy "property_views_select_admin"
+  on public.property_views for select
+  to authenticated
+  using (public.is_admin());
+
+-- ----- contact_reveals -----
+-- The paying customer can see their own reveals; admins see everything for support.
+drop policy if exists "contact_reveals_select_own" on public.contact_reveals;
+create policy "contact_reveals_select_own"
+  on public.contact_reveals for select
+  to authenticated
+  using (customer_id = auth.uid());
+
+drop policy if exists "contact_reveals_select_admin" on public.contact_reveals;
+create policy "contact_reveals_select_admin"
+  on public.contact_reveals for select
+  to authenticated
+  using (public.is_admin());
+
+-- ----- payments -----
+-- Nobody reads another user's payments; admins see all for revenue/reconciliation.
+drop policy if exists "payments_select_own" on public.payments;
+create policy "payments_select_own"
+  on public.payments for select
+  to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists "payments_select_admin" on public.payments;
+create policy "payments_select_admin"
+  on public.payments for select
+  to authenticated
+  using (public.is_admin());
+
+-- Writes to these tables always happen through the service-role (server) client.
+
+-- ------------------------------------------------------------------
+-- 4. Atomic functions (never read-then-write from JS)
+-- ------------------------------------------------------------------
+
+-- Records one property view with 30-minute per-visitor dedupe, skips the
+-- property owner, and bumps the counter atomically.
+create or replace function public.record_property_view(
+  p_property_id uuid,
+  p_viewer_id uuid,
+  p_visitor_hash text,
+  p_device_type text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owner_id uuid;
+  v_recent boolean;
+begin
+  if p_property_id is null or p_visitor_hash is null or p_visitor_hash = '' then
+    return;
+  end if;
+
+  select owner_id into v_owner_id from public.properties where id = p_property_id;
+  if v_owner_id is null or (p_viewer_id is not null and p_viewer_id = v_owner_id) then
+    return;
+  end if;
+
+  select exists (
+    select 1 from public.property_views
+    where property_id = p_property_id
+      and viewer_id is not distinct from p_viewer_id
+      and visitor_hash = p_visitor_hash
+      and viewed_at > now() - interval '30 minutes'
+  ) into v_recent;
+
+  if v_recent then
+    return;
+  end if;
+
+  insert into public.property_views (property_id, viewer_id, visitor_hash, device_type)
+  values (p_property_id, p_viewer_id, p_visitor_hash, p_device_type);
+
+  update public.properties set view_count = view_count + 1 where id = p_property_id;
+end;
+$$;
+
+-- Marks a contact reveal as done - idempotent on (property_id, customer_id).
+create or replace function public.record_contact_reveal(
+  p_property_id uuid,
+  p_customer_id uuid,
+  p_amount numeric,
+  p_payment_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_property_id is null or p_customer_id is null then
+    return;
+  end if;
+
+  insert into public.contact_reveals (property_id, customer_id, amount_paid, payment_id)
+  values (p_property_id, p_customer_id, p_amount, p_payment_id)
+  on conflict (property_id, customer_id) do nothing;
+
+  -- Only bump the counter when the row was actually inserted (first payment).
+  -- FOUND is true only when ON CONFLICT DO NOTHING actually inserted a row.
+  if found then
+    update public.properties
+    set contact_reveal_count = contact_reveal_count + 1
+    where id = p_property_id;
+  end if;
+end;
+$$;
+
+-- ------------------------------------------------------------------
+-- 5. Owner analytics (server-side ownership check, then read)
+-- ------------------------------------------------------------------
+
+-- Returns JSON analytics for one property. Raises NOT_ALLOWED unless the
+-- calling user owns the property or is an admin, so owners can never read
+-- another owner's analytics.
+create or replace function public.get_property_analytics(p_property_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_owner_id uuid;
+  v_result jsonb;
+begin
+  select owner_id into v_owner_id from public.properties where id = p_property_id;
+  if v_owner_id is null then
+    raise exception 'PROPERTY_NOT_FOUND';
+  end if;
+
+  if auth.uid() is null or (auth.uid() <> v_owner_id and not public.is_admin()) then
+    raise exception 'NOT_ALLOWED';
+  end if;
+
+  select jsonb_build_object(
+    'total_views',       (select count(*) from public.property_views where property_id = p_property_id),
+    'unique_visitors',   (select count(distinct visitor_hash) from public.property_views where property_id = p_property_id),
+    'mobile_views',      (select count(*) from public.property_views where property_id = p_property_id and device_type = 'mobile'),
+    'tablet_views',      (select count(*) from public.property_views where property_id = p_property_id and device_type = 'tablet'),
+    'desktop_views',     (select count(*) from public.property_views where property_id = p_property_id and device_type = 'desktop'),
+    'contact_reveals',   (select contact_reveal_count from public.properties where id = p_property_id),
+    'daily',             coalesce((
+      select jsonb_agg(jsonb_build_object('day', to_char(day, 'YYYY-MM-DD'), 'count', c))
+      from (
+        select date_trunc('day', viewed_at) as day, count(*) as c
+        from public.property_views
+        where property_id = p_property_id
+          and viewed_at >= (now() - interval '30 days')
+        group by date_trunc('day', viewed_at)
+        order by day
+      ) d
+    ), '[]'::jsonb)
+  ) into v_result;
+
+  return v_result;
+end;
+$$;
+
+-- ------------------------------------------------------------------
+-- 6. Listing view: featured detected at query time (featured_until > now())
+-- ------------------------------------------------------------------
+
+-- Owners' analytics rely on security-definer functions; this view inherits
+-- the caller's RLS so public listings still only surface `approved` rows.
+create or replace view public.properties_listing
+with (security_invoker = true) as
+select
+  p.*,
+  (p.is_featured and p.featured_until > now()) as featured_active
+from public.properties p;
+
+-- ------------------------------------------------------------------
+-- 7. Revoke direct writes on analytics tables (RPCs are the only writers)
+-- ------------------------------------------------------------------
+
+revoke insert, update, delete on public.property_views from anon, authenticated;
+revoke insert, update, delete on public.contact_reveals from anon, authenticated;
+revoke insert, update, delete on public.payments from anon, authenticated;
+
+grant execute on function public.record_property_view(uuid, uuid, text, text) to anon, authenticated;
+grant execute on function public.record_contact_reveal(uuid, uuid, numeric, uuid) to anon, authenticated;
+grant execute on function public.get_property_analytics(uuid) to authenticated;
+
+-- ==================== migration: 20260922000000_locations.sql ====================
+
+-- ============================================================
+-- MeraGhar - Location registry for SEO location pages
+-- Run this in the Supabase SQL editor (or via `supabase db push`)
+-- Idempotent and safe to re-run.
+--
+-- Gives every city/town its own seeded row so the dynamic
+-- /[location] and /[location]/[category] pages, sitemap and
+-- admin panel all work from one source of truth.
+-- ============================================================
+
+create table if not exists public.locations (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  slug        text not null unique,
+  state       text not null default '',
+  country     text not null default 'India',
+  type        text not null default 'city' check (type in ('city', 'town', 'area')),
+  parent_slug text,
+  nearby      text[] not null default '{}',
+  areas       text[] not null default '{}',
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists idx_locations_slug        on public.locations (slug);
+create index if not exists idx_locations_parent      on public.locations (parent_slug);
+create index if not exists idx_locations_active      on public.locations (is_active);
+
+-- ----- RLS -----
+alter table public.locations enable row level security;
+
+drop policy if exists "locations_select_public" on public.locations;
+create policy "locations_select_public"
+  on public.locations for select
+  to anon, authenticated
+  using (is_active = true);
+
+drop policy if exists "locations_select_admin_all" on public.locations;
+create policy "locations_select_admin_all"
+  on public.locations for select
+  to authenticated
+  using (public.is_admin());
+
+drop policy if exists "locations_write_admin" on public.locations;
+create policy "locations_write_admin"
+  on public.locations for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ----- SEED: initial locations -----
+insert into public.locations (name, slug, state, country, type, parent_slug, nearby, areas) values
+  ('Kaithal', 'kaithal', 'Haryana', 'India', 'city', null,
+   '{pundri,kurukshetra,karnal,panipat}',
+   '{"City Centre","Pehowa Road","Kurukshetra Road","Guhla Road","Division Chowk"}'),
+  ('Pundri', 'pundri', 'Haryana', 'India', 'town', null,
+   '{kaithal,kurukshetra,karnal}',
+   '{"Main Bazaar","Rajound Road","Bus Stand Road","Kaithal Road"}'),
+  ('Kurukshetra', 'kurukshetra', 'Haryana', 'India', 'city', null,
+   '{kaithal,karnal,ambala,pundri}',
+   '{"Railway Road","Pipli Chowk","Pehowa Chowk","Ladwa Road","Sarai Road"}'),
+  ('Karnal', 'karnal', 'Haryana', 'India', 'city', null,
+   '{kaithal,panipat,kurukshetra}',
+   '{"GT Road","Ramlila Ground","Mehra Road","Railway Road","Kunjpura Road"}'),
+  ('Panipat', 'panipat', 'Haryana', 'India', 'city', null,
+   '{karnal,ambala,delhi}',
+   '{"GT Road","Krishna Colony","Model Town","Motilal Nehru Park","Madina Chowk"}'),
+  ('Ambala', 'ambala', 'Haryana', 'India', 'city', null,
+   '{kurukshetra,chandigarh,panipat}',
+   '{"Ambala Cantt","Civil Lines","Mahesh Nagar","Prem Nagar","Barara"}'),
+  ('Chandigarh', 'chandigarh', 'Chandigarh', 'India', 'city', null,
+   '{ambala,panchkula,mohali}',
+   '{"Sector 17","Sector 22","Sector 35","Industrial Area Phase 1","Manimajra"}')
+on conflict (slug) do nothing;
+

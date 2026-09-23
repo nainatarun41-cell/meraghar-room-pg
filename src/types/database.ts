@@ -57,6 +57,48 @@ export type Database = {
         Update: { id?: string; city?: string; locality?: string; created_at?: string };
         Relationships: [];
       };
+      locations: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          state: string;
+          country: string;
+          type: "city" | "town" | "area";
+          parent_slug: string | null;
+          nearby: string[];
+          areas: string[];
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          state?: string;
+          country?: string;
+          type?: "city" | "town" | "area";
+          parent_slug?: string | null;
+          nearby?: string[];
+          areas?: string[];
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          state?: string;
+          country?: string;
+          type?: "city" | "town" | "area";
+          parent_slug?: string | null;
+          nearby?: string[];
+          areas?: string[];
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       properties: {
         Row: {
           id: string;

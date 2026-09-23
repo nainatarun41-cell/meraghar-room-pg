@@ -130,6 +130,98 @@ export async function adminDeleteLocality(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+export interface LocationInput {
+  id?: string;
+  name: string;
+  slug?: string;
+  state: string;
+  country?: string;
+  type: "city" | "town" | "area";
+  parentSlug?: string;
+  nearby?: string | string[];
+  areas?: string | string[];
+  isActive?: boolean;
+}
+
+function splitList(value: string | string[] | undefined): string[] {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value.join(",") : value;
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 40);
+}
+
+export async function adminUpsertLocation(input: LocationInput): Promise<ActionResult> {
+  const guard = await guardAdmin();
+  if (!guard.ok) return guard;
+
+  const name = cleanText(input.name, 60);
+  if (!name) return { ok: false, error: "Location name is required." };
+
+  const slug = cleanText(input.slug || slugifyLocation(name), 80).toLowerCase();
+  if (!slug) return { ok: false, error: "A slug is required." };
+
+  const payload = {
+    name,
+    slug,
+    state: cleanText(input.state, 60),
+    country: cleanText(input.country || "India", 60) || "India",
+    type: input.type,
+    parent_slug: input.parentSlug ? cleanText(input.parentSlug, 80).toLowerCase() : null,
+    nearby: splitList(input.nearby),
+    areas: splitList(input.areas),
+    is_active: input.isActive !== false,
+  };
+
+  const admin = createSupabaseAdminClient();
+  if (!admin) return { ok: false, error: "Database is not configured." };
+
+  let error: { message: string } | null = null;
+  if (input.id) {
+    const res = await admin.from("locations").update(payload).eq("id", input.id);
+    error = res.error;
+  } else {
+    const res = await admin.from("locations").upsert(payload, { onConflict: "slug" });
+    error = res.error;
+  }
+  if (error) {
+    if (/duplicate/i.test(error.message)) return { ok: false, error: "A location with this slug already exists." };
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/locations");
+  revalidatePath("/");
+  revalidatePath("/sitemap.xml");
+  return { ok: true };
+}
+
+export async function adminDeleteLocation(id: string): Promise<ActionResult> {
+  const guard = await guardAdmin();
+  if (!guard.ok) return guard;
+
+  const admin = createSupabaseAdminClient();
+  if (!admin) return { ok: false, error: "Database is not configured." };
+  const { error } = await admin.from("locations").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/locations");
+  revalidatePath("/");
+  revalidatePath("/sitemap.xml");
+  return { ok: true };
+}
+
+function slugifyLocation(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/['".,!?;:()\[\]{}]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 export async function adminToggleUserRole(userId: string, role: "user" | "admin"): Promise<ActionResult> {
   const guard = await guardAdmin();
   if (!guard.ok) return guard;

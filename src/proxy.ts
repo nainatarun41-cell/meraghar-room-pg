@@ -19,7 +19,10 @@ const ADMIN_PREFIX = "/admin";
 export async function proxy(request: NextRequest) {
   const env = getPublicEnv();
 
+  const { pathname } = request.nextUrl;
+
   let supabaseResponse = NextResponse.next({ request });
+  supabaseResponse.headers.set("x-pathname", pathname);
 
   if (!env.isSupabaseConfigured) {
     return supabaseResponse;
@@ -35,6 +38,7 @@ export async function proxy(request: NextRequest) {
           request.cookies.set(name, value)
         );
         supabaseResponse = NextResponse.next({ request });
+        supabaseResponse.headers.set("x-pathname", pathname);
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)
         );
@@ -43,19 +47,18 @@ export async function proxy(request: NextRequest) {
   });
 
   // Refresh the auth session on every request - do NOT run on static assets.
-  const {
+const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
 
-  // Redirect logged-in users away from auth pages.
+// Redirect logged-in users away from auth pages.
   if (user && PUBLIC_PATHS.some((p) => pathname === p)) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 

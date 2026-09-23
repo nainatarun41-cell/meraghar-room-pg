@@ -1,11 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { EMPTY_STATS, type LocationStats } from "@/lib/locations/seo";
 import type { PropertyWithImages, PropertyListItem, RequirementRow } from "@/types";
 
 export type DashboardRequirement = RequirementRow & { user_name?: string; user_phone?: string };
 
 export interface PublicPropertiesQuery {
   city?: string;
+  /** Case-insensitive city match — a list of name variants to `.in()` against. */
+  cityVariants?: string[];
   locality?: string;
   purpose?: string;
   type?: string;
@@ -60,7 +64,8 @@ export async function fetchPublicProperties(
     .select(LIST_SELECT, { count: "exact" })
     .eq("status", "approved");
 
-  if (query.city) builder.eq("city", query.city);
+  if (query.cityVariants?.length) builder.in("city", query.cityVariants);
+  else if (query.city) builder.eq("city", query.city);
   if (query.locality) builder.eq("locality", query.locality);
   if (query.purpose) builder.eq("purpose", query.purpose);
   if (query.type) builder.eq("property_type", query.type);
@@ -107,6 +112,76 @@ export async function fetchPublicProperties(
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+/** Common case variants of a city name used for case-insensitive `.in()` matching. */
+export function cityNameVariants(city: string): string[] {
+  const trimmed = city.trim();
+  const variants = new Set<string>([trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()]);
+  variants.add(
+    trimmed
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ")
+  );
+  variants.add(
+    trimmed
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ")
+  );
+  return Array.from(variants);
+}
+
+/** Aggregate stats for a location's approved listings (single DB query). */
+export const fetchCityStats = cache(async (city: string): Promise<LocationStats> => {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return EMPTY_STATS;
+
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id, purpose, property_type, price, created_at")
+    .eq("status", "approved")
+    .in("city", cityNameVariants(city));
+
+  if (error || !data) return EMPTY_STATS;
+
+  let total = 0;
+  let rent = 0;
+  let sale = 0;
+  let minRent: number | null = null;
+  let maxRent: number | null = null;
+  let minSale: number | null = null;
+  let maxSale: number | null = null;
+  let lastUpdated: string | null = null;
+  const byType: Record<string, number> = {};
+
+  for (const row of data) {
+    total += 1;
+    const purpose = row.purpose as PropertyListItem["purpose"];
+    if (purpose === "rent") rent += 1;
+    else sale += 1;
+
+    const key = String(row.property_type ?? "other");
+    byType[key] = (byType[key] ?? 0) + 1;
+
+    const price = Number(row.price);
+    if (Number.isFinite(price)) {
+      if (purpose === "rent") {
+        if (minRent === null || price < minRent) minRent = price;
+        if (maxRent === null || price > maxRent) maxRent = price;
+      } else {
+        if (minSale === null || price < minSale) minSale = price;
+        if (maxSale === null || price > maxSale) maxSale = price;
+      }
+    }
+
+    if (!lastUpdated || row.created_at > lastUpdated) lastUpdated = row.created_at;
+  }
+
+  return { total, rent, sale, byType, minRent, maxRent, minSale, maxSale, lastUpdated };
+});
 
 /** Fetch one approved property by id or slug with its images. */
 export async function fetchPublicProperty(key: string): Promise<PropertyWithImages | null> {

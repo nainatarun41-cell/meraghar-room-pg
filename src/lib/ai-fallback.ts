@@ -104,19 +104,19 @@ export async function buildLocalReply(
       return {
         matched: true,
         reply:
-          "Property free mein post karne ke steps:\n" +
-          "1. Login karein\n" +
-          "2. 'Post Property' / 'Add Property' par jayen\n" +
-          "3. Photos + details bharein aur map par exact location mark karein\n" +
-          "4. Submit karein — listing website par approved ho kar dikh jayegi.",
+          "Apni property list/bechni hai?\n" +
+          "1. Website par 'Post Requirement' / 'Contact MeraGhar' se apni property ki details bhejein\n" +
+          "2. MeraGhar team aapko call karegi\n" +
+          "3. Property ki photos aur details team ke saath share karein\n" +
+          "4. Approval ke baad listing website par dikh jayegi.",
       };
 
     case "favorites":
       return {
         matched: true,
         reply:
-          "Favorite/save karne ke liye kisi bhi property card par heart button dabayen (login zaroori hai).\n" +
-          "Saved properties 'Favorites' section mein milengi, aur Dashboard ke 'Saved Properties' se bhi dekh sakte hain.",
+          "Saved/favorites ka feature ab sirf MeraGhar admin (aap) ke liye available hai.\n" +
+          "Customers kisi bhi property card par 'Contact MeraGhar' se seedha admin se connect ho sakte hain.",
       };
 
     case "types": {

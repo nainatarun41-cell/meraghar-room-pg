@@ -2,15 +2,15 @@ import type { Metadata } from "next";
 import { Container } from "@/components/ui";
 import { PropertyForm } from "@/components/PropertyForm";
 import { fetchCities, fetchLocalities } from "@/lib/queries";
-import { requireUser } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Post a Property | MeraGhar",
-  description: "List your room, flat, house, shop or plot for free on MeraGhar in Kaithal and Pundri.",
+  description: "Add a property listing on MeraGhar in Kaithal and Pundri.",
 };
 
 export default async function AddPropertyPage() {
-  const user = await requireUser();
+  const user = await requireAdmin();
   const [cities, localities] = await Promise.all([fetchCities(), fetchLocalities()]);
 
   return (
